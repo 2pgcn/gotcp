@@ -6,8 +6,10 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"log"
+	"math"
 	"math/rand"
 	"net"
+	"time"
 )
 
 // TcpMaxSeq
@@ -16,6 +18,7 @@ import (
 const TcpMaxSeq = 2<<31 - 1
 const RecBufLen = 1024
 const SendBufLen = 1024
+const InitWindows = 100
 
 func StateMachine(ctx context.Context, SrcIP, DstIP net.IP, tcp *layers.TCP) (err error) {
 	//处理tcp
@@ -35,6 +38,7 @@ func StateMachine(ctx context.Context, SrcIP, DstIP net.IP, tcp *layers.TCP) (er
 		if tcp.SYN {
 			replyIp4 := getIp4TcpPackage(DstIP, SrcIP)
 			//发送ACK SYN
+			rand.Seed(time.Now().UnixNano())
 			Seq := rand.Uint32()
 			replyTcp := &layers.TCP{
 				SrcPort:    tcp.DstPort,
@@ -76,7 +80,9 @@ func StateMachine(ctx context.Context, SrcIP, DstIP net.IP, tcp *layers.TCP) (er
 		}
 		break
 	case GO_TCP_STATUS_SYN_RCVD: // server
+		fmt.Println(tcp.Ack, tcb.Seq)
 		if tcp.ACK {
+			// room
 			//客户端回复ACK
 			if tcp.Ack == tcb.Seq+1 {
 				tcb.ChangeTcpStatus(GO_TCP_STATUS_ESTABLISHED)
@@ -90,7 +96,56 @@ func StateMachine(ctx context.Context, SrcIP, DstIP net.IP, tcp *layers.TCP) (er
 
 	case GO_TCP_STATUS_ESTABLISHED:
 		{ // server | client
-			fmt.Printf("go pkg :%+v", tcp)
+			fmt.Printf("GO_TCP_STATUS_ESTABLISHED recv msg :%+v", tcp)
+			//push status
+			replyTcp := &layers.TCP{
+				SrcPort:    tcp.DstPort,
+				DstPort:    tcp.SrcPort,
+				Seq:        tcb.Seq + 1,
+				Ack:        tcp.Seq + uint32(len(tcp.Payload))%math.MaxUint32,
+				DataOffset: 0,
+				FIN:        false,
+				SYN:        false,
+				RST:        false,
+				PSH:        false,
+				ACK:        true,
+				URG:        false,
+				ECE:        false,
+				CWR:        false,
+				NS:         false,
+				Window:     100,
+				Urgent:     0,
+				Options:    nil,
+				Padding:    nil,
+			}
+			if tcp.PSH {
+				//fin状态
+				if tcp.FIN {
+					tcb.ChangeTcpStatus(GO_TCP_STATUS_CLOSING)
+					fmt.Printf("%s \r", GO_TCP_STATUS_CLOSING)
+				}
+				//回复消息
+				replyIp4 := getIp4TcpPackage(DstIP, SrcIP)
+				//发送ACK SYN
+				err = replyTcp.SetNetworkLayerForChecksum(replyIp4)
+				if err != nil {
+					return err
+				}
+				err = gopacket.SerializeLayers(replyBuf, opt, replyIp4, replyTcp, gopacket.Payload(replyTcp.Payload))
+				if err != nil {
+					return
+				}
+				tcb.Ack = replyTcp.Ack
+				err = tcb.SendBuf.Set(replyBuf.Bytes())
+				if err != nil {
+					return
+				}
+			}
+			//ack
+			if tcp.ACK {
+
+			}
+
 			break
 		}
 	case GO_TCP_STATUS_FIN_WAIT_1: //  ~client

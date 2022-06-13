@@ -26,6 +26,7 @@ const (
 
 //todo 修改需要加锁
 var inItTcbTable *tcbTable
+var inItTcbTableLock sync.RWMutex
 var once sync.Once
 
 type Tcb struct {
@@ -37,34 +38,49 @@ type Tcb struct {
 	SendBuf, RecBuf  *container.Ring
 	Next, Prev       *Tcb
 	Seq, Ack         uint32
+	TcbLock          sync.RWMutex
 }
 
 //tcb
 type tcbTable struct {
 	tcbHead *Tcb
+	tcbTail *Tcb
 	count   int
 }
 
-func GetTcbTable() *tcbTable {
+func InitTcbTable() {
+	inItTcbTableLock.Lock()
+	defer inItTcbTableLock.Unlock()
 	once.Do(func() {
 		inItTcbTable = &tcbTable{
 			tcbHead: nil,
 			count:   0,
 		}
 	})
+}
+
+func GetTcbTable() *tcbTable {
 	return inItTcbTable
 }
 
 func (t *tcbTable) GetFirstTcb() *Tcb {
+	inItTcbTableLock.RLock()
+	defer inItTcbTableLock.RUnlock()
 	return t.tcbHead
 }
 
 // SearchTcb todo 读锁
 func (t *tcbTable) SearchTcb(SrcIP, DstIP net.IP, SrcPort, DstPort layers.TCPPort) *Tcb {
-	for item := t.tcbHead; item != nil; item = item.Next {
+	item := t.tcbHead
+	if item == nil {
+		return nil
+	}
+	item.TcbLock.RLock()
+	for item != nil {
 		if item.SrcIP.Equal(SrcIP) && item.DstIP.Equal(DstIP) && item.SrcPort == SrcPort && item.DstPort == DstPort {
 			return item
 		}
+		item = item.Next
 	}
 	return nil
 }
@@ -81,8 +97,15 @@ func (t *tcbTable) CreateTcb(SrcIP, DstIP net.IP, SrcPort, DstPort layers.TCPPor
 		SendBuf:   container.NewRing(SendBufLen),
 	}
 	tcbTable := GetTcbTable()
-	tcb.Next = tcbTable.tcbHead
-	tcbTable.tcbHead = tcb
+	inItTcbTableLock.Lock()
+	defer inItTcbTableLock.Unlock()
+	if tcbTable.tcbHead == nil {
+		tcbTable.tcbHead = tcb
+		tcbTable.tcbTail = tcb
+	} else {
+		tcb.Prev = tcbTable.tcbTail
+		tcbTable.tcbTail.Next = tcb
+	}
 	return tcb
 }
 
@@ -98,5 +121,11 @@ func (t *tcbTable) RemoveTcb(tcb *Tcb) *Tcb {
 }
 
 func (tcb *Tcb) ChangeTcpStatus(status TcpStatus) {
+	tcb.TcbLock.Lock()
+	defer tcb.TcbLock.Unlock()
 	tcb.tcpStatus = status
+}
+
+func (tcb *Tcb) GetTcpInitPackage() *layers.TCP {
+	return &layers.TCP{}
 }

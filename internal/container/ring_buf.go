@@ -2,15 +2,15 @@ package container
 
 import (
 	errors "github.com/php403/gotcp/internal/error"
+	"sync/atomic"
 )
 
-// Ring
 type Ring struct {
 	// read
 	r     uint64 //读位置
 	w     uint64 //写位置
 	count uint64
-	buf   [][]byte
+	data  [][]byte
 }
 
 func NewRing(num int) *Ring {
@@ -27,32 +27,31 @@ func (r *Ring) init(num int) {
 		}
 		num <<= 1
 	}
-	r.buf = make([][]byte, num)
+	r.data = make([][]byte, num)
 }
 
 func (r *Ring) Get() (res []byte) {
-	if r.r == r.w {
+	readNum, writeNum, count := atomic.LoadUint64(&r.r), atomic.LoadUint64(&r.w), atomic.LoadUint64(&r.count)
+	if writeNum == readNum && count == 0 {
 		return
 	}
-	if r.count == 0 {
+	if !atomic.CompareAndSwapUint64(&r.r, readNum, (readNum+1)%(uint64(len(r.data))-1)) {
 		return
 	}
-	//todo mutex
-	res = r.buf[r.r]
-	r.buf[r.r] = []byte{}
-	r.r += 1
-	r.r %= uint64(len(r.buf))
-	r.count--
+	res = r.data[readNum]
+	r.data[readNum] = []byte{}
+	atomic.AddUint64(&r.count, ^uint64(0))
 	return
 }
 
 func (r *Ring) Set(data []byte) (err error) {
-	if r.w-r.r >= uint64(len(r.buf)) {
-		return errors.ErrRingFull
+	readNum, writeNum, count := atomic.LoadUint64(&r.r), atomic.LoadUint64(&r.w), atomic.LoadUint64(&r.count)
+	if writeNum == readNum && count > 0 {
+		return errors.ErrRingWrite
 	}
-	r.buf[r.w] = data
-	r.w += 1
-	r.w %= uint64(len(r.buf))
-	r.count++
+	writeNumNew := writeNum % (uint64(len(r.data)) - 1)
+	r.data[writeNum] = data
+	atomic.CompareAndSwapUint64(&r.w, writeNum, writeNumNew)
+	atomic.AddUint64(&r.count, 1)
 	return
 }

@@ -2,7 +2,7 @@
 <project version="4">
   <component name="SshConfigs">
     <configs>
-      <sshConfig authType="PASSWORD" host="124.71.70.189" id="d9f865af-63d7-4db1-a65c-ed9da33102b1" port="22" nameFormat="DESCRIPTIVE" username="root" useOpenSSHConfig="true" />
+      <sshConfig host="124.71.70.189" id="bffa2c72-c61f-4fad-a70f-8638cc431dbe" keyPath="$USER_HOME$/.ssh/pg.pem" port="22" nameFormat="DESCRIPTIVE" username="root" useOpenSSHConfig="true" />
     </configs>
   </component>
 </project>

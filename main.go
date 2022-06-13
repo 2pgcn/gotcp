@@ -2,15 +2,18 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/php403/gotcp/internal/tcp"
 	"github.com/songgao/water"
 	"log"
 	"math/rand"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
+	"sort"
 	"syscall"
 	"time"
 )
@@ -29,12 +32,14 @@ func main() {
 		panic(err)
 	}
 	log.Printf("tun interface: %s", iface.Name())
-	runBin("/bin/ip", "link", "set", "dev", iface.Name(), "mtu", MTU)
-	runBin("/bin/ip", "addr", "add", "192.168.2.0/24", "dev", iface.Name())
-	runBin("/bin/ip", "link", "set", "dev", iface.Name(), "up")
-	ctx := context.Background()
+	runBin("/usr/sbin/ip", "addr", "flush", "dev", iface.Name())
+	runBin("/usr/sbin/ip", "link", "set", "dev", iface.Name(), "mtu", MTU)
+	runBin("/usr/sbin/ip", "addr", "add", "192.168.2.0/24", "dev", iface.Name())
+	runBin("/usr/sbin/ip", "link", "set", "dev", iface.Name(), "up")
+	ctx, cancel := context.WithCancel(context.Background())
 	buf := make([]byte, BUFFERSIZE)
-	go func(ctx context.Context) {
+	tcp.InitTcbTable()
+	go func() {
 		for {
 			select {
 			case <-ctx.Done():
@@ -112,12 +117,12 @@ func main() {
 				}
 			}
 		}
-	}(ctx)
-
-	go func(ctx context.Context) {
+	}()
+	go func() {
 		for {
 			select {
 			case <-ctx.Done():
+				fmt.Println(222222)
 				return
 			default:
 				tcbHead := tcp.GetTcbTable().GetFirstTcb()
@@ -138,14 +143,14 @@ func main() {
 
 			}
 		}
-	}(ctx)
+	}()
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
 	for {
 		s := <-c
 		switch s {
 		case syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT:
-			ctx.Done()
+			cancel()
 			return
 		case syscall.SIGHUP:
 		default:
@@ -163,4 +168,12 @@ func runBin(bin string, args ...string) {
 	if err := cmd.Run(); err != nil {
 		panic(err)
 	}
+}
+
+func demo() {
+	sort.Search(10, func(i int) bool {
+		fmt.Println(i)
+		return i == 2
+	})
+	net.Listen("tcp", "127.0.0.1")
 }

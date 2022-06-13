@@ -2,12 +2,13 @@
 <project version="4">
   <component name="WebServers">
     <option name="servers">
-      <webServer id="c19d2c1f-4acc-454f-88c7-ded8173aa6c3" name="pg">
-        <fileTransfer rootFolder="/root/pg/gotcp" accessType="SFTP" host="124.71.70.189" port="22" sshConfigId="d9f865af-63d7-4db1-a65c-ed9da33102b1" sshConfig="root@124.71.70.189:22 password">
+      <webServer id="ac89412a-1b47-4b2d-8001-468c2f732f97" name="p1">
+        <fileTransfer accessType="SFTP" host="124.71.70.189" port="22" sshConfigId="bffa2c72-c61f-4fad-a70f-8638cc431dbe" sshConfig="root@124.71.70.189:22 key" keyPair="true">
           <advancedOptions>
-            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" connections="2" passiveMode="true" shareSSLContext="true" />
           </advancedOptions>
         </fileTransfer>
+        <option name="numberOfConnections" value="2" />
       </webServer>
     </option>
   </component>
